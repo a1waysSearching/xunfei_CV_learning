@@ -1,11 +1,11 @@
-# xunfei_CV_learning
+# `xunfei_CV_learnin`
 第一次参加线上的有关深度学习的课程笔记与体会。
-------------------------------------------------------------------------------------------​
+
 **赛题：基于脑PET图像的疾病预测**
 说明： NC指代健康    MCI指代轻度认知障碍                      
 数据文件格式为.nii
 
-##整体流程：
+## 整体流程：
       1.准备正数据集与负数据集→供以学习
 
       2.数据图片预处理 ①去噪
@@ -42,7 +42,7 @@
 
        6.根据最后结果再对模型的参数进行调整
 
-##从基线方案中得出代码整体框架：
+## 从基线方案中得出代码整体框架：
 1.导入所需的库与工具
 
 2.读取文件（测试集与训练集）并打乱顺序
@@ -71,45 +71,35 @@
 
 Summary↑：第1到3步是前期的准备工作，第4到7步为预测结果，第8到9为保存文件
 
-##我出现的问题：
+## 我出现的问题：
 （下面是对基线代码保存到本地时，我出现的问题）
 
-生成提交结果的DataFrame，其中包括样本ID和预测类别。
-submit = pd.DataFrame(
-    {
-        'uuid': [int(x.split('/')[-1][:-4]) for x in test_path],  # 提取测试集文件名中的ID
-        'label': test_pred_label                                  # 预测的类别
-    }
-)
+![img]("E:\Videos\Desktop\微信截图_20231007202440.png")
+
 上面是基线方案中截取的代码，我的本地环境运行时uuid这里出现了问题
 
-
+![img]("E:\Videos\Desktop\微信截图_20231007202602.png")
 
 查阅资料知道是出现了字符串中有非数字内容，导致出错
 
 通过调整代码发现原数据输出的非数字字符为下面图像↓
 
-
+![img]("E:\Videos\Desktop\微信截图_20231007202636.png")
 
 显然是“Test\”这个字符串导致问题，这个时候我们查阅split函数的用法 
 
- 具体可以参考Python中超好用的split()函数，详解_python split_捣鼓Python的博客-CSDN博客
+ 具体可以参考[Python中超好用的split()函数，详解_python split_捣鼓Python的博客-CSDN博客](https://blog.csdn.net/weixin_44793743/article/details/126572303)
 
-或Python学习：split()方法以及关于str.split()[0]等形式内容的详细讲解_景墨轩的博客-CSDN博客
+或[Python学习：split()方法以及关于str.split等形式内容的详细讲解_景墨轩的博客-CSDN博客](https://blog.csdn.net/qq_41780295/article/details/88555183)
 
 调整过后以下是我的修改方案：
 
-生成提交结果的DataFrame，其中包括样本ID和预测类别。
-submit = pd.DataFrame(
-    {
-        'uuid': [int(x.split('/')[-1][:-4].split("\\")[-1]) for x in test_path],  # 提取测试集文件名中的ID
-        'label': test_pred_label  # 预测的类别
-    }
-)
+![img]("E:\Videos\Desktop\微信截图_20231007203039.png")
+
 主要是对于Python中split的学习与应用
 
 就可以输出一个标准的格式
-
+![img](https://img-blog.csdnimg.cn/08c6b4f391af439db93164cf2f9b85bf.png)
 最后就完成本地环境的结果输出 ！
 
 ​
