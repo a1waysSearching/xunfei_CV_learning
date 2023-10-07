@@ -74,17 +74,25 @@ Summary↑：第1到3步是前期的准备工作，第4到7步为预测结果，
 ## 我出现的问题：
 （下面是对基线代码保存到本地时，我出现的问题）
 
-![img]("E:\Videos\Desktop\微信截图_20231007202440.png")
+```
+# 生成提交结果的DataFrame，其中包括样本ID和预测类别。
+submit = pd.DataFrame(
+    {
+        'uuid': [int(x.split('/')[-1][:-4]) for x in test_path],  # 提取测试集文件名中的ID
+        'label': test_pred_label                                  # 预测的类别
+    }
+)
+```
 
 上面是基线方案中截取的代码，我的本地环境运行时uuid这里出现了问题
 
-![img]("E:\Videos\Desktop\微信截图_20231007202602.png")
+![img](https://img-blog.csdnimg.cn/a8bde8517f694d2fbaac9d401261baa2.png)
 
 查阅资料知道是出现了字符串中有非数字内容，导致出错
 
 通过调整代码发现原数据输出的非数字字符为下面图像↓
 
-![img]("E:\Videos\Desktop\微信截图_20231007202636.png")
+![img](https://img-blog.csdnimg.cn/23565a5a38254391a2233af9c4f92774.png)
 
 显然是“Test\”这个字符串导致问题，这个时候我们查阅split函数的用法 
 
@@ -94,7 +102,15 @@ Summary↑：第1到3步是前期的准备工作，第4到7步为预测结果，
 
 调整过后以下是我的修改方案：
 
-![img]("E:\Videos\Desktop\微信截图_20231007203039.png")
+```
+# 生成提交结果的DataFrame，其中包括样本ID和预测类别。
+submit = pd.DataFrame(
+    {
+        'uuid': [int(x.split('/')[-1][:-4].split("\\")[-1]) for x in test_path],  # 提取测试集文件名中的ID
+        'label': test_pred_label  # 预测的类别
+    }
+)
+```
 
 主要是对于Python中split的学习与应用
 
