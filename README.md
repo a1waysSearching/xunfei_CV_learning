@@ -711,14 +711,539 @@ submit.to_csv('submit_cnn_Kflod5.csv', index=None)
 
 ```
 
+# 第三次课程笔记与体会
+
+文档中告诉了我们四种对CNN网络的调整与改进的方法：
+
+              分别是①使用不同预训练模型
+
+                   ②使用多个或不同的数据增强
+
+                   ③模型交叉验证
+
+                   ④测试集增强
+
+那我们从这四个方面入手试一试！
+
+## 1.预训练模型：
+
+首先，什么是预训练模型？
+
+简单来说，预训练模型(pre-trained model)是前人为了解决类似问题所创造出来的模型。你在解决问题的时候，不用从零开始训练一个新模型，可以从在类似问题中训练过的模型入手。
+
+比如说，如果你想做一辆自动驾驶汽车，可以花数年时间从零开始构建一个性能优良的图像识别算法，也可以从Google在ImageNet数据集上训练得到的inception model(一个预训练模型)起步，来识别图像。
+
+一个预训练模型可能对于你的应用中并不是100%的准确对口，但是它可以为你节省大量功夫。
+
+有哪些算法模型？
+LeNet-5
+
+AlexNet
+
+VGG系列
+
+Inception系列
+
+ResNet系列
+
+等等...
+
+我们基础教程中使用的是ResNet18，是一个小型而高效的网络结构，更复杂的版本有ResNet34、50、101等网络有更复杂的网络结构。但是对于我们这次的数据，使用ResNet18已经足够了。所以我们继续用ResNet18
+
+如果想更改网络的话可以这样：
+
+```
+model = models.resnet18(True)#这个True是使用预训练模型
+```
+可改为下面的代码（别的网络也同理）
+```
+model = models.resnet50(True)#可以直接从pytorch这里导出里面不同的模型
+```
+你甚至可以手搓一个新网络（加油↖(^ω^)↗就是说俺还没这个水平
+
+        要注意的是：
+不同网络记得改一下矩阵mat。比如从resnet18改为resnet50，就要把下面
+```
+model.fc = nn.Linear(512, 2)
+```
+改为
+```
+model.fc = nn.Linear(2048, 2)
+```
+
+不然网络无法计算（两个矩阵相乘必须第一个的列数为第二个的行数）
+
+## 2.数据增强
+
+**为什么要数据增强？**
+因为在实际工程中，经常有数据量太少(相对模型而言)、样本不均衡、很难覆盖全部的场景的情况，解决这类问题的一个有效途径是通过数据增强，使模型学习获得较好的泛化性能。
+
+**怎么数据增强？**
+我这里使用Albumentations数据增强方法，利用开源算法库来实现图像增强。可参考：
+[Albumentations数据增强方法](https://blog.csdn.net/qq_27039891/article/details/100795846)
+
+里面有详细的数据增强介绍。
+
+        这里必须提一嘴！！！！
+
+**过多过复杂的数据增强可能会导致数据结果正则化或者说是拟和效果差！！！**
+
+我已经给大家试过了，太多花里胡哨的变化只会让给结果负面效果
+
+这里附上我自己的代码，有些效果过于fancy我就不要了
+
+```
+train_loader = torch.utils.data.DataLoader(                    #训练集增强
+        XunFeiDataset(train_path[:-10],
+                      A.Compose([
+                          A.RandomCrop(115, 115),
+                          A.RandomRotate90(p=0.69),
+                          A.VerticalFlip(p=0.5),
+                          A.HorizontalFlip(p=0.5),
+                          A.RandomBrightnessContrast(p=0.62),
+                          #A.OpticalDistortion(distort_limit=0.05, shift_limit=0.05, interpolation=1, border_mode=4, value=None, mask_value=None, always_apply=False, p=0.5),
+                          #A.GridDistortion(num_steps=5, distort_limit=0.3, interpolation=1, border_mode=4, value=None, mask_value=None, always_apply=False, p=0.5),
+
+                      ])
+                      ), batch_size=3, shuffle=True   , num_workers=0, pin_memory=True
+    )
 
 
 
+#分割----------------------------------------------------------------------------------
+
+val_loader = torch.utils.data.DataLoader(
+        XunFeiDataset(train_path[-10:],
+                      A.Compose([
+                          A.RandomCrop(115, 115),
+
+                      ])
+                      ), batch_size=3, shuffle=False   , num_workers=0, pin_memory=True
+    )
+
+#分割----------------------------------------------------------------------------------
+
+test_loader = torch.utils.data.DataLoader(
+    XunFeiDataset(test_path,
+                  A.Compose([
+                      A.RandomCrop(115, 115),
+                      A.HorizontalFlip(p=0.5),
+                      A.VerticalFlip(p=0.5),
+                      A.RandomBrightnessContrast(p=0.62),
+                  ])
+                  ), batch_size=3, shuffle=False   , num_workers=0, pin_memory=True
+)
+```
+
+还有需要注意的是：
+
+训练集可以增强猛一点，验证集和测试集就不可以太猛了，不然有你坏果子吃（不是
+
+**这里还有一个可以调试的地方：**
+
+```
+batch_size=3, shuffle=True   , num_workers=0, pin_memory=True
+```
+Batch_size的作用：决定了下降的方向。
+
+在合理范围内，增大Batch_size的好处：
+
+提高了内存利用率以及大矩阵乘法的并行化效率；
+跑完一次epoch(全数据集）所需要的迭代次数减少，对相同的数据量，处理的速度比小的Batch_size要更快；
+在一定范围内，一般来说 Batch_Size 越大，其确定的下降方向越准，引起训练震荡越小。
+盲目增大Batch_size，Batch_size过大的坏处：
+
+提高了内存利用率，但是内存容量可能撑不住；
+跑完一次epoch(全数据集)所需的迭代次数减少，要想达到相同的精度，其所花费的时间大大增加，从而对参数的修正也就显得更加缓慢；
+Batch_Size 增大到一定程度，其确定的下降方向已经基本不再变化（会影响随机性的引入）。
+
+大家可以都尝试一下哈
 
 
 
+pin_memory这个是如果有GPU可以用True
+
+我没打开的时候GPU只跑20%，打开了可以跑到50%
+![img](https://img-blog.csdnimg.cn/51b4a04e53cc4e8aa1428cf689c49fb2.png)
+
+## 3.交叉验证与测试集增强
+这里我和在一起讲，因为我当时发现这两个是要配合一起用的
+
+先上代码！
+
+代码讲解
+
+```
+from sklearn.model_selection import train_test_split, StratifiedKFold, KFold
+
+skf = KFold(n_splits=10, random_state=233, shuffle=True)
+
+for fold_idx, (train_idx, val_idx) in enumerate(skf.split(train_path, train_path)):
+
+    train_loader = torch.utils.data.DataLoader(                    #训练集增强
+        XunFeiDataset(train_path[:-10],
+                      A.Compose([
+                          A.RandomCrop(115, 115),
+                          A.RandomRotate90(p=0.69),
+                          A.VerticalFlip(p=0.5),
+                          A.HorizontalFlip(p=0.5),
+                          A.RandomBrightnessContrast(p=0.62),
+                          #A.OpticalDistortion(distort_limit=0.05, shift_limit=0.05, interpolation=1, border_mode=4, value=None, mask_value=None, always_apply=False, p=0.5),
+                          #A.GridDistortion(num_steps=5, distort_limit=0.3, interpolation=1, border_mode=4, value=None, mask_value=None, always_apply=False, p=0.5),
+
+                      ])
+                      ), batch_size=3, shuffle=True   , num_workers=0, pin_memory=True
+    )
+
+    val_loader = torch.utils.data.DataLoader(
+        XunFeiDataset(train_path[-10:],
+                      A.Compose([
+                          A.RandomCrop(115, 115),
+
+                      ])
+                      ), batch_size=3, shuffle=False   , num_workers=0, pin_memory=True
+    )
+
+    model = XunFeiNet()
+    model = model.to('cuda')
+    criterion = nn.CrossEntropyLoss().cuda()
+    optimizer = torch.optim.AdamW(model.parameters(), 0.001)
+
+    for _ in range(10):
+        train_loss = train(train_loader, model, criterion, optimizer)
+        val_acc = validate(val_loader, model, criterion)
+        train_acc = validate(train_loader, model, criterion)
+
+        print(train_loss, train_acc, val_acc)
+        torch.save(model.state_dict(), 'E:/XUNFEIproject/resnet18_fold{0}.pt'.format(fold_idx))
+
+test_loader = torch.utils.data.DataLoader(
+    XunFeiDataset(test_path,
+                  A.Compose([
+                      A.RandomCrop(115, 115),
+                      A.HorizontalFlip(p=0.5),
+                      A.VerticalFlip(p=0.5),
+                      A.RandomBrightnessContrast(p=0.62),
+                  ])
+                  ), batch_size=3, shuffle=False   , num_workers=0, pin_memory=True
+)
 
 
+def predict(test_loader, model, criterion):
+    model.eval()
+    val_acc = 0.0
 
+    test_pred = []
+    with torch.no_grad():
+        for i, (input, target) in enumerate(test_loader):
+            input = input.cuda()
+            target = target.cuda()
+
+            output = model(input)
+            test_pred.append(output.data.cpu().numpy())
+
+    return np.vstack(test_pred)
+
+
+pred = None
+model_path = glob.glob(r'E:\XUNFEIproject')
+
+for model_path in ['resnet18_fold0.pt', 'resnet18_fold1.pt', 'resnet18_fold2.pt',
+                   'resnet18_fold3.pt', 'resnet18_fold4.pt', 'resnet18_fold5.pt',
+                   'resnet18_fold6.pt', 'resnet18_fold7.pt', 'resnet18_fold8.pt',
+                   'resnet18_fold9.pt'#, 'resnet18_fold10.pt', 'resnet18_fold11.pt',
+                   #'resnet18_fold12.pt', 'resnet18_fold13.pt', 'resnet18_fold14.pt',
+                   #'resnet18_fold15.pt', 'resnet18_fold16.pt', 'resnet18_fold17.pt',
+                   #'resnet18_fold18.pt', 'resnet18_fold19.pt'
+                   ]:
+#这里多少个取决于前面n_splits等于多少
+
+    model = XunFeiNet()
+    model = model.to('cuda')
+    model.load_state_dict(torch.load(model_path))
+    criterion = nn.CrossEntropyLoss().cuda()
+    optimizer = torch.optim.AdamW(model.parameters(), 0.001)#0.001
+
+    for _ in range(15):
+        if pred is None:
+            pred = predict(test_loader, model, criterion)
+        else:
+            pred += predict(test_loader, model, criterion)
+
+submit = pd.DataFrame(
+    {
+        'uuid': [int(x.split('/')[-1][:-4].split("\\")[-1]) for x in test_path],
+        'label': pred.argmax(1)
+    })
+submit['label'] = submit['label'].map({1: 'NC', 0: 'MCI'})
+submit = submit.sort_values(by='uuid')
+submit.to_csv('submit_cnn_resnet18_Kflod7.csv', index=None)
+```
+
+我的n_splits用了10，所以是保存10个模型文件，然后交叉验证，可以根据需求更改哈
+
+下面我用伪代码讲解一下：
+
+这里说明了训练十次，根据我的经验，多是好的，但是不一定是最好的！
+
+```
+    for _ in range(10):
+        train_loss = train(train_loader, model, criterion, optimizer)
+        val_acc = validate(val_loader, model, criterion)
+        train_acc = validate(train_loader, model, criterion)
+```
+
+这里是损失函数和优化器
+
+可以说是个小上分点，如果不会弄的来改的话是个踩坑点
+
+这里用的是交叉熵损失函数，已经ok的了
+
+还有AdamW优化器，也是ok的了
+
+这里的学习率用的是0.001，我每次改都是踩坑，所以大家可以和我一起多踩踩（不是，看看能不能搞出一个好参数呢
+
+```
+    criterion = nn.CrossEntropyLoss().cuda()#损失函数
+    optimizer = torch.optim.AdamW(model.parameters(), 0.001)#优化器
+```
+这里有一个坑点！！！！！！
+
+保存的.pt文件必须和main.py文件在同一个文件夹，不然就会出现读取不到的问题！！！！！
+
+最后，把我的代码附上！
+
+```
+import os
+import sys
+import glob
+import argparse
+import pandas as pd
+import numpy as np
+import albumentations as A
+import cv2
+import torch
+import nibabel as nib
+import torchvision.models as models
+import torchvision.transforms as transforms
+import torchvision.datasets as datasets
+import torch.nn as nn
+import torch.nn.functional as F
+import torch.optim as optim
+from torch.autograd import Variable
+from torch.utils.data.dataset import Dataset
+from nibabel.viewers import OrthoSlicer3D
+from tqdm import tqdm
+from PIL import Image
+from sklearn.model_selection import train_test_split, StratifiedKFold, KFold
+
+train_path = glob.glob('E:/XUNFEIproject/脑PET图像分析和疾病预测挑战赛公开数据/Train/*/*')
+test_path = glob.glob('E:/XUNFEIproject/脑PET图像分析和疾病预测挑战赛公开数据/Test/*')
+
+np.random.shuffle(train_path)
+np.random.shuffle(test_path)
+DATA_CACHE = {}
+torch.manual_seed(0)
+torch.backends.cudnn.deterministic = False
+torch.backends.cudnn.benchmark = True
+
+
+class XunFeiDataset(Dataset):
+    def __init__(self, img_path, transform=None):
+        self.img_path = img_path
+        if transform is not None:
+            self.transform = transform
+        else:
+            self.transform = None
+
+    def __getitem__(self, index):
+        if self.img_path[index] in DATA_CACHE:
+            img = DATA_CACHE[self.img_path[index]]
+        else:
+            img = nib.load(self.img_path[index])
+            img = img.dataobj[:, :, :, 0]
+            DATA_CACHE[self.img_path[index]] = img
+
+        # 随机选择一些通道
+        idx = np.random.choice(range(img.shape[-1]), 50)
+        img = img[:, :, idx]
+        img = img.astype(np.float32)
+
+        if self.transform is not None:
+            img = self.transform(image=img)['image']
+
+        img = img.transpose([2, 0, 1])
+        return img, torch.from_numpy(np.array(int('NC' in self.img_path[index])))
+
+    def __len__(self):
+        return len(self.img_path)
+
+
+class XunFeiNet(nn.Module):
+    def __init__(self):
+        super(XunFeiNet, self).__init__()
+
+        model = models.resnet18(True)
+        model.conv1 = torch.nn.Conv2d(50, 64, kernel_size=(7, 7), stride=(2, 2), padding=(3, 3), bias=False)
+        model.avgpool = nn.AdaptiveAvgPool2d(1)
+        model.fc = nn.Linear(512, 2)
+        self.resnet = model
+
+    def forward(self, img):
+        out = self.resnet(img)
+        return out
+
+
+def train(train_loader, model, criterion, optimizer):
+    model.train()
+    train_loss = 0.0
+    for i, (input, target) in enumerate(train_loader):
+
+        input = input.cuda()  # (non_blocking=True)
+        target = target.cuda()  # (non_blocking=True)
+
+        output = model(input)
+        loss = criterion(output, target.long())
+
+        optimizer.zero_grad()
+        loss.backward()
+        optimizer.step()
+
+        if i % 11 == 0:  # 设置log_interval=20，所以每隔20个batch会输出，而batch_size=2,所以每隔40个数据输出一次。
+            print(loss.item())
+
+        train_loss += loss.item()
+
+    return train_loss / len(train_loader)
+
+
+def validate(val_loader, model, criterion):
+    model.eval()
+    val_acc = 0.0
+
+    with torch.no_grad():
+        for i, (input, target) in enumerate(val_loader):
+            input = input.cuda()
+            target = target.cuda()
+
+            # compute output
+            output = model(input)
+            loss = criterion(output, target.long())
+
+            val_acc += (output.argmax(1) == target).sum().item()
+
+    return val_acc / len(val_loader.dataset)
+
+
+from sklearn.model_selection import train_test_split, StratifiedKFold, KFold
+
+skf = KFold(n_splits=10, random_state=233, shuffle=True)
+
+for fold_idx, (train_idx, val_idx) in enumerate(skf.split(train_path, train_path)):
+
+    train_loader = torch.utils.data.DataLoader(                    #训练集增强
+        XunFeiDataset(train_path[:-10],
+                      A.Compose([
+                          A.RandomCrop(115, 115),
+                          A.RandomRotate90(p=0.68),
+                          A.VerticalFlip(p=0.5),
+                          A.HorizontalFlip(p=0.59),
+                          #A.RandomContrast(p=0.5),
+                          A.RandomBrightnessContrast(p=0.64),
+                          #A.OpticalDistortion(distort_limit=0.05, shift_limit=0.05, interpolation=1, border_mode=4, value=None, mask_value=None, always_apply=False, p=0.5),
+                          #A.GridDistortion(num_steps=5, distort_limit=0.3, interpolation=1, border_mode=4, value=None, mask_value=None, always_apply=False, p=0.5),
+
+                      ])
+                      ), batch_size=3, shuffle=True   , num_workers=0, pin_memory=True
+    )
+
+    val_loader = torch.utils.data.DataLoader(
+        XunFeiDataset(train_path[-10:],
+                      A.Compose([
+                          A.RandomCrop(115, 115),
+
+                      ])
+                      ), batch_size=3, shuffle=False   , num_workers=0, pin_memory=True
+    )
+
+    model = XunFeiNet()
+    model = model.to('cuda')
+    criterion = nn.CrossEntropyLoss().cuda()
+    optimizer = torch.optim.AdamW(model.parameters(), 0.001)
+
+    for _ in range(10):
+        train_loss = train(train_loader, model, criterion, optimizer)
+        val_acc = validate(val_loader, model, criterion)
+        train_acc = validate(train_loader, model, criterion)
+
+        print(train_loss, train_acc, val_acc)
+        torch.save(model.state_dict(), 'E:/XUNFEIproject/resnet18_fold{0}.pt'.format(fold_idx))
+
+test_loader = torch.utils.data.DataLoader(
+    XunFeiDataset(test_path,
+                  A.Compose([
+                      A.RandomCrop(115, 115),
+                      A.HorizontalFlip(p=0.59),
+                      #A.RandomContrast(p=0.5),
+                      A.RandomBrightnessContrast(p=0.64),
+                  ])
+                  ), batch_size=3, shuffle=False   , num_workers=0, pin_memory=True
+)
+
+
+def predict(test_loader, model, criterion):
+    model.eval()
+    val_acc = 0.0
+
+    test_pred = []
+    with torch.no_grad():
+        for i, (input, target) in enumerate(test_loader):
+            input = input.cuda()
+            target = target.cuda()
+
+            output = model(input)
+            test_pred.append(output.data.cpu().numpy())
+
+    return np.vstack(test_pred)
+
+
+pred = None
+model_path = glob.glob(r'E:\XUNFEIproject')
+
+for model_path in ['resnet18_fold0.pt', 'resnet18_fold1.pt', 'resnet18_fold2.pt',
+                   'resnet18_fold3.pt', 'resnet18_fold4.pt', 'resnet18_fold5.pt',
+                   'resnet18_fold6.pt', 'resnet18_fold7.pt', 'resnet18_fold8.pt',
+                   'resnet18_fold9.pt'#, 'resnet18_fold10.pt', 'resnet18_fold11.pt',
+                   #'resnet18_fold12.pt', 'resnet18_fold13.pt', 'resnet18_fold14.pt',
+                   #'resnet18_fold15.pt', 'resnet18_fold16.pt', 'resnet18_fold17.pt',
+                   #'resnet18_fold18.pt', 'resnet18_fold19.pt'
+                   ]:
+
+    model = XunFeiNet()
+    model = model.to('cuda')
+    model.load_state_dict(torch.load(model_path))
+    criterion = nn.CrossEntropyLoss().cuda()
+    optimizer = torch.optim.AdamW(model.parameters(), 0.001)#0.001
+
+    for _ in range(15):
+        if pred is None:
+            pred = predict(test_loader, model, criterion)
+        else:
+            pred += predict(test_loader, model, criterion)
+
+submit = pd.DataFrame(
+    {
+        'uuid': [int(x.split('/')[-1][:-4].split("\\")[-1]) for x in test_path],
+        'label': pred.argmax(1)
+    })
+submit['label'] = submit['label'].map({1: 'NC', 0: 'MCI'})
+submit = submit.sort_values(by='uuid')
+submit.to_csv('submit_cnn_resnet18_Kflod5.csv', index=None)
+
+```
+
+这一次的效果还看得过去哈哈，还需要加油！！！
+
+全部25次的提交次数已经用完了，想看后面的得分也看不了了
 
 
